@@ -1,217 +1,367 @@
-🤖 Agentic RAG with CrewAI
-A multi-agent, self-correcting Retrieval-Augmented Generation (RAG) pipeline powered by CrewAI, LangChain, Groq (Llama 3.3 70B), and Hugging Face embeddings — featuring intelligent routing, hallucination filtering, and hybrid PDF + web search retrieval.
+# 🤖 Agentic-RAG: Multi-Agent Retrieval-Augmented Generation System
 
-🚀 Overview
-Traditional RAG pipelines are static: they retrieve, generate, and output — with no mechanism to catch bad retrievals, hallucinated answers, or irrelevant responses. This project solves that problem by building an agentic, self-correcting RAG system using a crew of specialized AI agents that collaborate, critique, and verify each other's work before surfacing a final answer.
+> An intelligent, multi-agent Q&A system powered by CrewAI, LangChain, and Groq — combining PDF-based vector retrieval with live web search to deliver accurate, hallucination-checked answers.
 
-The pipeline is demonstrated on the landmark ML paper "Attention Is All You Need" (Vaswani et al., 2017), enabling intelligent Q&A over the document while seamlessly falling back to live web search for out-of-scope queries.
+---
 
-Who is this for?
+## 🚀 Overview
 
-ML engineers exploring advanced RAG architectures
-Developers building production-grade AI pipelines with multi-agent orchestration
-Researchers who want reliable, hallucination-resistant document Q&A systems
-✨ Features
-🧠 Multi-Agent Orchestration
-5 specialized CrewAI agents, each with a clearly defined role, goal, and backstory
-Sequential task execution with shared context passed between agents
-No agent can delegate to another, ensuring clean role separation
-🔀 Intelligent Query Routing
-A dedicated Router Agent classifies every incoming question
-Routes to the local PDF vectorstore (RAG) for domain-specific questions (e.g., self-attention, transformers)
-Routes to Tavily web search for general or real-time knowledge queries
-📄 PDF-Grounded Retrieval (RAG)
-Downloads and indexes the "Attention Is All You Need" PDF automatically at startup
-Uses PDFSearchTool with semantic search backed by Groq's Llama 3.3 70B and Hugging Face embeddings (BAAI/bge-small-en-v1.5)
-Retrieval is grounded in the actual document, not model memory
-🌐 Live Web Search Fallback
-Integrates Tavily Search API for queries outside the PDF's scope
-Returns top-3 web results, summarized and grounded by the Retriever Agent
-✅ Multi-Stage Answer Validation
-Grader Agent: Checks if retrieved content is actually relevant to the question
-Hallucination Grader: Verifies the generated answer is factually grounded
-Answer Grader: Final quality gate — triggers a web search fallback if the answer fails validation
-⚡ Fast Inference with Groq
-Powered by Llama 3.3 70B Versatile via Groq's ultra-low-latency inference API
-Temperature set to 0.1 for highly deterministic, factual responses
-🛠️ Tech Stack
-Layer	Technology
-LLM	Llama 3.3 70B Versatile (via Groq API)
-Agent Framework	CrewAI 0.28.8
-LLM Orchestration	LangChain Community 0.0.29
-Embeddings	Hugging Face BAAI/bge-small-en-v1.5 (via sentence-transformers)
-PDF RAG	CrewAI Tools PDFSearchTool
-Web Search	Tavily Search API (via LangChain integration)
-Environment Config	python-dotenv
-Language	Python 3.10+
-🏗️ Architecture / How It Works
-The system implements a Corrective RAG (CRAG) pattern — a self-healing pipeline that validates its own outputs and falls back gracefully when retrieval or generation quality is insufficient.
+**Agentic-RAG** is a production-ready, agentic question-answering system that goes far beyond traditional RAG pipelines. Instead of a single retrieval-generation step, it orchestrates a **crew of specialized AI agents** — each responsible for a distinct stage of the pipeline: routing, retrieval, relevance grading, hallucination detection, and final answer validation.
 
-High-Level Data Flow
+### The Problem It Solves
+
+Standard RAG pipelines suffer from:
+- Retrieving irrelevant chunks and blindly passing them to the LLM
+- No verification of whether the generated answer is actually grounded in retrieved content
+- No fallback when local knowledge is insufficient
+
+**Agentic-RAG** solves this by introducing agent-level checks at each step — ensuring the final answer is relevant, grounded, and trustworthy.
+
+### Who Is It For?
+
+- AI/ML engineers exploring agentic architectures
+- Developers building document Q&A systems
+- Researchers experimenting with LLM orchestration frameworks
+- Anyone who wants to move beyond naive RAG into robust, production-grade pipelines
+
+---
+
+## ✨ Features
+
+### 🧠 Multi-Agent Orchestration
+- Five specialized CrewAI agents, each owning a distinct responsibility in the pipeline
+- Sequential task execution with shared context passing between agents
+
+### 🔀 Intelligent Query Routing
+- Keyword-based router that dynamically decides between **local vector search** (PDF knowledge base) and **live web search**
+- Easily extensible routing logic
+
+### 📄 PDF Knowledge Base
+- Automatically downloads and indexes the landmark *"Attention Is All You Need"* paper
+- Powered by `PDFSearchTool` with HuggingFace embeddings (`BAAI/bge-small-en-v1.5`)
+
+### 🌐 Live Web Search Fallback
+- Integrates Tavily Search API for real-time, web-sourced answers when the PDF doesn't cover the topic
+
+### 🔍 Hallucination Detection
+- Dedicated `Hallucination Grader` agent cross-checks generated answers against retrieved context before surfacing them to the user
+
+### ✅ Answer Quality Grading
+- A final `Answer Grader` agent validates the relevance and completeness of the answer, triggering a web search fallback if needed
+
+### 🖥️ Streamlit Web Interface
+- Clean, user-friendly UI for asking questions and viewing AI-generated answers in real time
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | Streamlit |
+| **LLM Backend** | Groq API (`llama3-8b-8192`) via LangChain OpenAI-compatible interface |
+| **Agent Orchestration** | CrewAI |
+| **Vector Search** | CrewAI `PDFSearchTool` + HuggingFace Embeddings |
+| **Web Search** | Tavily Search API (via LangChain) |
+| **Embeddings** | `BAAI/bge-small-en-v1.5` (sentence-transformers) |
+| **Environment Management** | Python `dotenv` |
+| **HTTP** | Python `requests` (PDF download) |
+
+---
+
+## 🏗️ Architecture / How It Works
+
+The system follows an **agentic pipeline** where each agent receives the output of the previous one as context:
+
+```
 User Question
       │
       ▼
 ┌─────────────────┐
-│  Router Agent   │──── keyword analysis ────► 'vectorstore' or 'websearch'
-└─────────────────┘
-      │
-      ▼
+│  Router Agent   │  ──► Decides: vectorstore OR web_search
+└────────┬────────┘
+         │
+         ▼
 ┌─────────────────────┐
-│  Retriever Agent    │
-│  ├─ RAG (PDF)       │◄── PDFSearchTool (Groq + HuggingFace embeddings)
-│  └─ Web Search      │◄── Tavily Search API
-└─────────────────────┘
-      │
-      ▼
-┌─────────────────┐
-│  Grader Agent   │──── relevance check ────► 'yes' / 'no'
-└─────────────────┘
-      │
-      ▼
-┌──────────────────────┐
-│ Hallucination Grader │──── factual grounding ────► 'yes' / 'no'
-└──────────────────────┘
-      │
-      ▼
-┌──────────────────┐
-│  Answer Grader   │──── final validation + optional web fallback
-└──────────────────┘
-      │
-      ▼
-  Final Answer
-Agent Roles & Responsibilities
-Agent	Role	Key Responsibility
-Router_Agent	Traffic Director	Routes question to vectorstore or web search
-Retriever_Agent	Information Retriever	Fetches content from the chosen source
-Grader_agent	Relevance Judge	Filters out irrelevant retrieved content
-hallucination_grader	Fact Checker	Ensures the answer is grounded in real facts
-answer_grader	Final Validator	Confirms answer quality; triggers fallback if needed
-Router Logic
-The router_tool currently uses keyword matching ('self-attention' → vectorstore) as a fast heuristic, with the Router Agent's LLM reasoning as a broader fallback for nuanced classification.
+│  Retriever Agent    │  ──► Fetches from PDF vectorstore or Tavily web search
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  Grader Agent       │  ──► Checks if retrieved content is relevant to the question
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│  Hallucination Grader   │  ──► Verifies answer is grounded in retrieved content
+└────────┬────────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  Answer Grader      │  ──► Final quality check; triggers fallback if needed
+└────────┬────────────┘
+         │
+         ▼
+   Final Answer ✅
+```
 
-📂 Folder Structure
-agentic-rag-crewai/
+### Data Flow
+
+1. The user submits a question via the Streamlit UI.
+2. The **Router Agent** inspects the question and routes it to either the local PDF vectorstore (for self-attention/transformer topics) or Tavily web search.
+3. The **Retriever Agent** fetches relevant content from the selected source.
+4. The **Grader Agent** filters out irrelevant or low-quality retrievals.
+5. The **Hallucination Grader** ensures the generated answer is factually supported by the retrieved context.
+6. The **Answer Grader** performs a final pass and either surfaces the answer or initiates a web search fallback.
+7. The validated answer is displayed in the Streamlit interface.
+
+---
+
+## 📂 Folder Structure
+
+```
+agentic-rag/
 │
-├── app.py                        # Main application — agents, tasks, crew definition
+├── app.py                        # Main application — agents, tasks, Streamlit UI
 ├── requirements.txt              # Python dependencies
-├── .env                          # Environment variables (not committed)
-├── .env.example                  # Template for environment setup
-│
-└── attenstion_is_all_you_need.pdf  # Auto-downloaded at runtime (Attention Is All You Need)
-Note: The PDF is downloaded programmatically from NeurIPS proceedings on every run. The local file is used for vectorstore indexing and semantic search.
+├── .env                          # API keys (not committed — see .env.example)
+├── attention_is_all_you_need.pdf # Auto-downloaded at runtime; PDF knowledge base
+└── README.md                     # Project documentation
+```
 
-⚙️ Installation & Setup
-Prerequisites
-Python 3.10 or higher
-A Groq API key (free tier available)
-A Tavily API key (free tier available)
-Steps
-1. Clone the repository
+| File | Purpose |
+|---|---|
+| `app.py` | Core logic: LLM init, PDF download, agent/task definitions, CrewAI orchestration, Streamlit UI |
+| `requirements.txt` | Pinned dependencies for reproducible installs |
+| `.env` | Stores secret API keys (Groq, Tavily) — never commit this file |
 
-git clone https://github.com/rohan27795/AGENTIC-RAG.git
-cd agentic-rag-crewai
-2. Create and activate a virtual environment
+---
 
+## ⚙️ Installation & Setup
+
+### Prerequisites
+
+- Python 3.9+
+- A [Groq API key](https://console.groq.com/)
+- A [Tavily API key](https://app.tavily.com/)
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/agentic-rag.git
+cd agentic-rag
+```
+
+### 2. Create a Virtual Environment
+
+```bash
 python -m venv venv
-source venv/bin/activate        # macOS/Linux
-venv\Scripts\activate           # Windows
-3. Install dependencies
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+```
 
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
-4. Configure environment variables
+```
 
+### 4. Set Up Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
 cp .env.example .env
-# Edit .env and add your API keys
-5. Run the pipeline
+```
 
-python app.py
-On first run, the pipeline will:
+Then fill in your API keys (see [Environment Variables](#-environment-variables) below).
 
-Download the "Attention Is All You Need" PDF (~3MB)
-Build the local vectorstore index (this may take 30–60 seconds)
-Execute two example queries and print the full agent trace + final answers
-🔑 Environment Variables
-Create a .env file in the project root with the following:
+### 5. Run the Application
 
+```bash
+streamlit run app.py
+```
+
+The app will open in your browser at `http://localhost:8501`.
+
+> **Note:** On first run, the app will automatically download the *"Attention Is All You Need"* PDF (~2MB) and build the vector index. This may take a minute.
+
+---
+
+## 🔑 Environment Variables
+
+Create a `.env` file at the project root with the following keys:
+
+```env
 # .env.example
 
-# Groq API Key — used for Llama 3.3 70B inference
+# Groq API Key — used to power the LLM (llama3-8b-8192)
 # Get yours at: https://console.groq.com/
 GROQ_API_KEY=your_groq_api_key_here
 
-# Tavily API Key — used for live web search fallback
+# Tavily Search API Key — used for live web search fallback
 # Get yours at: https://app.tavily.com/
 TAVILY_API_KEY=your_tavily_api_key_here
-Variable	Required	Description
-GROQ_API_KEY	✅ Yes	Authenticates with Groq's inference API for Llama 3.3 70B
-TAVILY_API_KEY	✅ Yes	Enables Tavily web search for out-of-scope queries
-🧪 Usage
-Default Queries (as configured in __main__)
-The app ships with two demonstration queries that test both pipeline branches:
+```
 
-# Query 1 — Routed to the PDF vectorstore (RAG path)
-inputs = {"question": "Tell me about self-attention mechanism in Transformers?"}
+| Variable | Required | Description |
+|---|---|---|
+| `GROQ_API_KEY` | ✅ Yes | Authenticates requests to Groq's LLM API (free tier available) |
+| `TAVILY_API_KEY` | ✅ Yes | Authenticates requests to Tavily's real-time web search API |
 
-# Query 2 — Routed to web search
-inputs = {"question": "Tell me about LLMs using web_search?"}
-Running Custom Queries
-Modify the inputs dict in app.py to ask any question:
+---
 
-inputs = {"question": "What is the purpose of positional encoding in the Transformer?"}
-result = rag_crew.kickoff(inputs=inputs)
-print(result)
-Understanding the Output
-With verbose=True set on the Crew, you'll see a full trace of each agent's reasoning:
+## 🧪 Usage
 
-[Router Agent] Routing question to: vectorstore
-[Retriever Agent] Searching vectorstore for: self-attention mechanism...
-[Grader Agent] Retrieved content is relevant: yes
-[Hallucination Grader] Answer is grounded in facts: yes
-[Answer Grader] Final answer: The self-attention mechanism allows each token...
-📸 Screenshots / Demo
-📌 Suggested screenshots to add:
+### Asking Questions
 
-Terminal output showing the full multi-agent trace for a vectorstore query
-Terminal output for a web search query showing the Tavily fallback
-A diagram of the agent pipeline (the architecture diagram above works well)
-To capture output for documentation:
+1. Launch the app with `streamlit run app.py`
+2. Type your question in the input box
+3. Click **"Get Answer"**
+4. Watch the multi-agent pipeline reason through your question in the terminal (verbose mode), then display the final answer
 
-python app.py 2>&1 | tee demo_output.txt
-🚧 Challenges & Learnings
-1. Balancing Router Precision vs. Recall
-The keyword-based router_tool is fast but brittle — questions phrased differently about the same concept can be misrouted. The LLM-backed Router Agent adds reasoning capacity, but prompt tuning was necessary to keep routing deterministic.
+### Example Questions
 
-2. Vectorstore Cold Start Latency
-Building the Chroma/FAISS index from the PDF on every run adds significant startup time. A production version would persist the vectorstore to disk and only rebuild when the source document changes.
+**Routed to PDF vectorstore (transformer paper topics):**
+```
+What is self-attention and how does it work?
+How does the multi-head attention mechanism function?
+What are the key components of the Transformer architecture?
+```
 
-3. CrewAI Context Passing
-Configuring the context parameter between tasks — ensuring the grader receives the retriever's output, and the hallucination grader receives the grader's verdict — required careful task dependency mapping to avoid context bleed.
+**Routed to web search (general/current topics):**
+```
+What are the latest LLM benchmarks in 2024?
+Who are the leading AI research labs today?
+What is LangChain used for?
+```
 
-4. Embedding Model Selection
-Choosing BAAI/bge-small-en-v1.5 balanced retrieval quality with inference speed. Larger models improved accuracy on nuanced technical questions but added unacceptable latency for an interactive use case.
+### Extending the Router
 
-5. Hallucination in Chained Agents
-When any agent in the chain produces a low-confidence output, errors can compound downstream. The multi-stage grading approach (relevance → hallucination → answer quality) was specifically designed to catch failures at each stage rather than at the end.
+To route more topics to the vectorstore, update the `router_tool` function in `app.py`:
 
-🔮 Future Improvements
-Persist the vectorstore to disk (Chroma or FAISS) to eliminate cold-start indexing on every run
-Expand the document corpus — support ingestion of multiple PDFs or entire research paper collections
-Streaming output — stream agent responses token-by-token for a more interactive experience
-Add a web UI — wrap the pipeline in a FastAPI backend + React frontend with real-time agent trace visualization
-Smarter routing — replace the keyword heuristic with a small fine-tuned classifier or embedding similarity score
-Evaluation harness — integrate RAGAS or TruLens to benchmark retrieval precision, answer faithfulness, and hallucination rates
-Memory between sessions — add long-term memory so the agent crew can recall past Q&A sessions
-Support more LLM providers — abstract the LLM layer to swap between Groq, OpenAI, Anthropic, or local Ollama models
-🤝 Contributing
+```python
+@tool
+def router_tool(question):
+    vectorstore_keywords = ['self-attention', 'transformer', 'encoder', 'decoder', 'positional encoding']
+    if any(kw in question.lower() for kw in vectorstore_keywords):
+        return 'vectorstore'
+    return 'web_search'
+```
+
+---
+
+## 📸 Screenshots / Demo
+
+> **Suggested screenshot locations:**
+> - `assets/screenshot_ui.png` — the Streamlit question input and answer display
+> - `assets/screenshot_terminal.png` — the verbose agent reasoning output in the terminal
+
+To add screenshots, create an `assets/` folder and reference them here:
+
+```markdown
+![UI Screenshot](assets/screenshot_ui.png)
+![Agent Pipeline Terminal](assets/screenshot_terminal.png)
+```
+
+---
+
+## 🚧 Challenges & Learnings
+
+### Challenges
+
+**1. Agent Context Bleeding**
+Getting CrewAI agents to pass only the relevant context (not the entire conversation history) between tasks required careful use of the `context` parameter in task definitions. Without this, downstream agents would receive too much noise.
+
+**2. Hallucination Grading Subjectivity**
+Defining what counts as "hallucination" for the grader agent is inherently ambiguous. The agent prompt had to be carefully tuned to distinguish between a well-supported claim and a plausible-sounding fabrication.
+
+**3. PDFSearchTool Latency**
+Building the vector index on first run (embedding the full Transformer paper) adds noticeable cold-start latency. Future iterations should persist the index to disk.
+
+**4. Routing Logic Fragility**
+The initial keyword-based router (`'self-attention' in question`) is brittle. Synonyms and paraphrases bypass it. A semantic router using embeddings would be more robust.
+
+**5. Groq Rate Limits**
+With five agents each making LLM calls, complex queries can hit Groq's rate limits on the free tier. Batching or caching intermediate results helps mitigate this.
+
+### Learnings
+
+- **CrewAI's agent abstraction** makes it remarkably easy to decompose complex pipelines into single-responsibility units — a major win for maintainability.
+- **LangChain's tool abstraction** enables seamless swapping of retrieval backends (vector DB, web, SQL) without changing agent logic.
+- **Groq's inference speed** (`llama3-8b-8192` at ~800 tokens/sec) makes rapid multi-agent pipelines practical in ways that weren't possible with hosted OpenAI endpoints alone.
+- **HuggingFace embeddings** (`BAAI/bge-small-en-v1.5`) offer a strong quality-to-cost ratio for local embedding — no API key required.
+
+---
+
+## 🔮 Future Improvements
+
+| Enhancement | Description |
+|---|---|
+| 🗂️ **Persistent Vector Index** | Cache the PDF vector index to disk (ChromaDB/FAISS) to eliminate cold-start latency on repeat runs |
+| 🔀 **Semantic Router** | Replace keyword matching with an embedding-based semantic router for more accurate, intent-aware routing |
+| 📚 **Multi-Document Support** | Allow users to upload their own PDFs via the Streamlit UI and dynamically index them |
+| 🔄 **Retry & Fallback Logic** | Add explicit retry loops when the hallucination grader rejects an answer, before falling back to web search |
+| 📊 **Agent Reasoning Visualization** | Display each agent's chain-of-thought in the UI (expandable sections) for transparency |
+| 💾 **Conversation History** | Maintain session-level conversation history for multi-turn Q&A |
+| 🧪 **Evaluation Suite** | Build a benchmark dataset of questions with ground-truth answers to measure end-to-end pipeline accuracy |
+| 🐳 **Dockerization** | Package the app in a Docker container for one-command deployment |
+
+---
+
+## 🤝 Contributing
+
 Contributions are welcome! Here's how to get started:
 
-Fork the repository
-Create a branch for your feature: git checkout -b feature/smarter-router
-Make your changes and write clear commit messages
-Test your changes end-to-end with at least one vectorstore query and one web search query
-Open a pull request with a description of what you changed and why
-Please follow these guidelines:
+1. **Fork** the repository
+2. **Create a feature branch**: `git checkout -b feature/your-feature-name`
+3. **Make your changes** and add tests where applicable
+4. **Commit** with a clear message: `git commit -m "feat: add semantic router"`
+5. **Push** to your branch: `git push origin feature/your-feature-name`
+6. **Open a Pull Request** — describe what you changed and why
 
-Keep agent roles and responsibilities clearly separated
-Add comments when modifying the task chain or agent prompts
-Do not commit .env files or the downloaded PDF
+### Code Style
+
+- Follow PEP 8 for Python code
+- Keep agent definitions and task definitions in clearly separated sections
+- Add docstrings to any new tools or utility functions
+
+### Reporting Issues
+
+Please open a GitHub Issue with:
+- A clear description of the bug or feature request
+- Steps to reproduce (for bugs)
+- Expected vs. actual behavior
+
+---
+
+## 📜 License
+
+This project is licensed under the **MIT License**.
+
+```
+MIT License
+
+Copyright (c) 2024
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+```
+
+---
+
+<div align="center">
+
+**Built with ❤️ using [CrewAI](https://github.com/joaomdmoura/crewAI) · [LangChain](https://langchain.com/) · [Groq](https://groq.com/) · [Streamlit](https://streamlit.io/)**
+
+</div>
