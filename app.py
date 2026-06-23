@@ -17,7 +17,7 @@ os.environ['TAVILY_API_KEY'] = os.getenv("TAVILY_API_KEY")
 llm = ChatOpenAI(
     openai_api_base="https://api.groq.com/openai/v1",
     openai_api_key=os.environ['GROQ_API_KEY'],
-    model_name="llama3-8b-8192",
+    model_name="llama-3.1-8b-instant",
     temperature=0.1,
     max_tokens=1000,
 )
@@ -33,7 +33,7 @@ rag_tool = PDFSearchTool(pdf='attention_is_all_you_need.pdf',
         llm=dict(
             provider="groq",
             config=dict(
-                model="llama3-8b-8192",
+                model="llama-3.1-8b-instant",
             ),
         ),
         embedder=dict(
@@ -48,25 +48,91 @@ rag_tool = PDFSearchTool(pdf='attention_is_all_you_need.pdf',
 web_search_tool = TavilySearchResults(k=3)
 
 @tool
-def router_tool(question):
+def router_tool(question: str) -> str:
+    """
+    Router tool to route the user's question to either a vectorstore or a web search.
+    If 'self-attention' is in the question, route to vectorstore. Otherwise, route to web search.
+    """
     if 'self-attention' in question:
         return 'vectorstore'
     else:
         return 'web_search'
 
 # Define Agents
-Router_Agent = Agent(role='Router', goal='Route user question to a vectorstore or web search', verbose=True, allow_delegation=False, llm=llm)
-Retriever_Agent = Agent(role="Retriever", goal="Use the information retrieved from the vectorstore to answer the question", verbose=True, allow_delegation=False, llm=llm)
-Grader_agent = Agent(role='Answer Grader', goal='Filter out erroneous retrievals', verbose=True, allow_delegation=False, llm=llm)
-hallucination_grader = Agent(role="Hallucination Grader", goal="Filter out hallucination", verbose=True, allow_delegation=False, llm=llm)
-answer_grader = Agent(role="Answer Grader", goal="Filter out hallucination from the answer.", verbose=True, allow_delegation=False, llm=llm)
+Router_Agent = Agent(
+    role='Router',
+    goal='Route user question to a vectorstore or web search',
+    backstory='You are an expert router responsible for routing a user query to either a vectorstore or a web search based on keywords.',
+    verbose=True,
+    allow_delegation=False,
+    llm=llm
+)
+Retriever_Agent = Agent(
+    role="Retriever",
+    goal="Use the information retrieved from the vectorstore to answer the question",
+    backstory="You are a retrieval expert skilled in extracting and summarizing relevant information from documents in the vectorstore.",
+    verbose=True,
+    allow_delegation=False,
+    llm=llm
+)
+Grader_agent = Agent(
+    role='Answer Grader',
+    goal='Filter out erroneous retrievals',
+    backstory='You are a detail-oriented analyst who grades retrieved documents for their relevance to the user\'s question, filtering out irrelevant content.',
+    verbose=True,
+    allow_delegation=False,
+    llm=llm
+)
+hallucination_grader = Agent(
+    role="Hallucination Grader",
+    goal="Filter out hallucination",
+    backstory="You are an auditor focused on checking if the generated answer is factually grounded in the retrieved documents, preventing any hallucinations.",
+    verbose=True,
+    allow_delegation=False,
+    llm=llm
+)
+answer_grader = Agent(
+    role="Answer Grader",
+    goal="Filter out hallucination from the answer.",
+    backstory="You evaluate if the generated answer directly addresses the user's question and is completely accurate.",
+    verbose=True,
+    allow_delegation=False,
+    llm=llm
+)
 
 # Define Tasks
-router_task = Task(description=("Analyse the keywords in the question {question} and decide whether it is eligible for a vectorstore search or a web search."), agent=Router_Agent, tools=[router_tool])
-retriever_task = Task(description=("Retrieve information based on router task decision."), agent=Retriever_Agent, context=[router_task])
-grader_task = Task(description=("Evaluate retrieved content relevance."), agent=Grader_agent, context=[retriever_task])
-hallucination_task = Task(description=("Check if the answer is factually supported."), agent=hallucination_grader, context=[grader_task])
-answer_task = Task(description=("If hallucination task approves, return a concise answer; otherwise, perform web search."), context=[hallucination_task], agent=answer_grader)
+router_task = Task(
+    description="Analyse the keywords in the question {question} and decide whether it is eligible for a vectorstore search or a web search.",
+    expected_output="The routing decision: either 'vectorstore' or 'web_search'.",
+    agent=Router_Agent,
+    tools=[router_tool]
+)
+retriever_task = Task(
+    description="Retrieve information based on router task decision.",
+    expected_output="Relevant information retrieved from the vectorstore.",
+    agent=Retriever_Agent,
+    context=[router_task],
+    tools=[rag_tool]
+)
+grader_task = Task(
+    description="Evaluate retrieved content relevance.",
+    expected_output="A grading report indicating whether the retrieved information is relevant.",
+    agent=Grader_agent,
+    context=[retriever_task]
+)
+hallucination_task = Task(
+    description="Check if the answer is factually supported.",
+    expected_output="An evaluation of whether the answer is supported by the facts (no hallucination).",
+    agent=hallucination_grader,
+    context=[grader_task]
+)
+answer_task = Task(
+    description="If hallucination task approves, return a concise answer; otherwise, perform web search.",
+    expected_output="The final concise answer to the user's question.",
+    context=[hallucination_task],
+    agent=answer_grader,
+    tools=[web_search_tool]
+)
 
 rag_crew = Crew(agents=[Router_Agent, Retriever_Agent, Grader_agent, hallucination_grader, answer_grader], tasks=[router_task, retriever_task, grader_task, hallucination_task, answer_task], verbose=True)
 
